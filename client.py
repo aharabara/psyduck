@@ -1,5 +1,6 @@
 # -*- coding: utf-8 -*-
 # CLIENT
+import traceback
 from socket import *
 import sys
 import stun
@@ -22,9 +23,8 @@ def sigserver_exch():
     v_id_server = 'id_server_1002'
 
     # IP и PORT этого КЛИЕНТА
-    v_ip_localhost = '127.0.0.1'
+    v_ip_localhost = '89.149.118.246'
     v_port_localhost = 4003
-
     udp_socket = ''
 
     try:
@@ -63,17 +63,20 @@ def sigserver_exch():
             # печатаем сообщение с полученными данными и отправляем сообщение
             # 'Hello, SERVER!' на сервер по указанному в сообщении адресу.
             data_in = udp_socket.recvfrom(1024)
-            data_0 = data_in[0]
+            data_0 = str(data_in[0]).replace('b\'', '').rstrip('\'')
+            # print(str(data_0).split(","))
             data_p = data_0.split(",")
+
             if data_p[0] == 'sigserv':
-                print('signal server data: ', data_p)
+                print('signal server data: ', data_p, (data_p[3], int(data_p[4])))
                 udp_socket.sendto(bytes('Hello, SERVER!', 'UTF-8'), (data_p[3], int(data_p[4])))
             else:
                 print("No, it is not Rio de Janeiro!")
             udp_socket.close()
 
     except Exception as a:
-        print(a);
+        print(a)
+        print(traceback.format_exc(a))
         print('Exit!')
         sys.exit(1)
 

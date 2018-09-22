@@ -30,8 +30,8 @@ class Query_processing_server(DatagramProtocol):
         try:
             # Разбиваем полученные данные по разделителю (,) [id_host,name_host,external_ip,external_port,id_dest]
             # id_dest - искомый id сервера
-            print('123')
-            data = str(data).split(",")
+            print(str(data))
+            data = str(data).replace('b\'', '').rstrip('\'').split(",")
 
             if self.path is None:
                 # Запрос на указание пути к файлу БД sqlite3, при отсутствии будет создана новая БД по указанному пути:
@@ -48,9 +48,15 @@ class Query_processing_server(DatagramProtocol):
             c.execute('''CREATE TABLE IF NOT EXISTS compliance_table ("id_host" text UNIQUE, "name_host" text, "ip_host" text, \
             "port_host" text)''')
 
+            id_host = str(data[0])
+            name_host = str(data[1])
+            ip_host = str(data[2])
+            port_host = str(data[3])
+            print(data)
+
             # Добавляем новый хост, если еще не создан
             # Обновляем данные ip, port для существующего хоста
-            c.execute('INSERT OR IGNORE INTO compliance_table VALUES (?, ?, ?, ?);', data[0:len(data) - 1])
+            c.execute('INSERT OR IGNORE INTO compliance_table VALUES (?, ?, ?, ?);', (id_host, name_host, ip_host, port_host))
             # Сохраняем изменения
             conn.commit()
             c.execute('SELECT * FROM compliance_table')
@@ -64,7 +70,7 @@ class Query_processing_server(DatagramProtocol):
             else:
                 # transport.write - отправка сообщения с данными: id_host, name_host, ip_host, port_host и меткой sigserver
                 lst = 'sigserv' + ',' + cf[0] + ',' + cf[1] + ',' + cf[2] + ',' + cf[3]
-                self.transport.write(str(lst), addr_out)
+                self.transport.write(bytes(lst, 'UTF-8'), addr_out)
             # Закрываем соединение
             conn.close()
         except Exception as a:
