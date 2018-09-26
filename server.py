@@ -1,84 +1,106 @@
-# -*- coding: utf-8 -*-
-# SERVER
+#!/usr/bin/env python
+# coding:utf-8
 
-from socket import *
-import traceback
+import socket
+import struct
 import sys
-import stun
+from collections import namedtuple
 
+FullCone = "Full Cone"  # 0
+RestrictNAT = "Restrict NAT"  # 1
+RestrictPortNAT = "Restrict Port NAT"  # 2
+SymmetricNAT = "Symmetric NAT"  # 3
+UnknownNAT = "Unknown NAT" # 4
+NATTYPE = (FullCone, RestrictNAT, RestrictPortNAT, SymmetricNAT, UnknownNAT)
 
-def sigserver_exch():
-    # СЕРВЕР <-> СИГНАЛЬНЫЙ СЕРВЕР
-    # СЕРВЕР <- КЛИЕНТ
-
-    # СЕРВЕР - отправляет запрос на СИГНАЛЬНЫЙ СЕРВЕР с белым статическим IP со своими данными о текущих
-    # значениях IP и PORT. Принимает запрос от КЛИЕНТА.
-
-    # Внешний IP и PORT СИГНАЛЬНОГО СЕРВЕРА:
-    v_sig_host = '127.0.0.1'
-    v_sig_port = 4001
-
-    # id этого КЛИЕНТА, имя этого КЛИЕНТА, id искомого СЕРВЕРА
-    v_id_client = 'id_server_1002'
-    v_name_client = 'name_server_2'
-    v_id_server = 'none'
-
-    # IP и PORT этого КЛИЕНТА
-    v_ip_localhost = '127.0.0.1'
-    v_port_localhost = 4002
-
-    udp_socket = ''
-
+def addr2bytes(addr, nat_type_id):
+    """Convert an address pair to a hash."""
+    host, port = addr
     try:
-        # Получаем текущий внешний IP и PORT при помощи утилиты STUN
-        nat_type, external_ip, external_port = stun.get_ip_info()
-        # Присваиваем переменным белый IP и PORT сигнального сервера для отправки запроса
-        host_sigserver = v_sig_host
-        port_sigserver = v_sig_port
-        addr_sigserv = (host_sigserver, port_sigserver)
+        host = socket.gethostbyname(host)
+    except (socket.gaierror, socket.error):
+        raise ValueError("invalid host")
+    try:
+        port = int(port)
+    except ValueError:
+        raise ValueError("invalid port")
+    try:
+        nat_type_id = int(nat_type_id)
+    except ValueError:
+        raise ValueError("invalid NAT type")
+    bytes = socket.inet_aton(host)
+    bytes += struct.pack("H", port)
+    bytes += struct.pack("H", nat_type_id)
+    return bytes
 
-        # Заполняем словарь данными для отправки на СИГНАЛЬНЫЙ СЕРВЕР:
-        # текущий id + имя + текущий внешний IP и PORT,
-        # и id_dest - укажем 'none'
-        # В качестве id можно использовать хеш случайного числа + соль
-        data_out = v_id_client + ',' + v_name_client + ',' + external_ip + ',' + str(external_port) + ',' + v_id_server
 
-        # Создадим сокет с атрибутами:
-        # использовать пространство интернет адресов (AF_INET),
-        # передавать данные в виде отдельных сообщений
-        udp_socket = socket(AF_INET, SOCK_DGRAM)
+def main():
+    port = sys.argv[1]
+    try:
+        port = int(sys.argv[1])
+    except (IndexError, ValueError):
+        pass
 
-        # Присвоим переменным свой локальный IP и свободный PORT для получения информации
-        host = v_ip_localhost
-        port = v_port_localhost
-        addr = (host, port)
+    sockfd = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+    sockfd.bind(("", port))
+    print "listening on *:%d (udp)" % port
 
-        # Свяжем сокет с локальными IP и PORT
-        udp_socket.bind(addr)
-        print('socket binding')
+    poolqueue = {}
+    # A,B with addr_A,addr_B,pool=100
+    # temp state {100:(nat_type_id, addr_A, addr_B)}
+    # final state {addr_A:addr_B, addr_B:addr_A}
+    symmetric_chat_clients = {}
+    ClientInfo = namedtuple("ClientInfo", "addr, nat_type_id")
+    while True:
+        data, addr = sockfd.recvfrom(1024)
+        if data.startswith("msg "):
+            # forward symmetric chat msg, act as TURN server
+            try:
+                sockfd.sendto(data[4:], symmetric_chat_clients[addr])
+                print("msg successfully forwarded to {0}".format(symmetric_chat_clients[addr]))
+                print(data[4:])
+            except KeyError:
+                print("something is wrong with symmetric_chat_clients!")
+        else:
+            # help build connection between clients, act as STUN server
+            print "connection from %s:%d" % addr
+            pool, nat_type_id = data.strip().split()
+            sockfd.sendto("ok {0}".format(pool), addr)
+            print("pool={0}, nat_type={1}, ok sent to client".format(pool, NATTYPE[int(nat_type_id)]))
+            data, addr = sockfd.recvfrom(2)
+            if data != "ok":
+                continue
 
-        # Отправим сообщение на СИГНАЛЬНЫЙ СЕРВЕР
-        udp_socket.sendto(bytes(data_out, 'UTF-8'), addr_sigserv)
+            print "request received for pool:", pool
 
-        while True:
-            # Если первый элемент списка - 'sigserv' (сообщение от СИГНАЛЬНОГО СЕРВЕРА),
-            # печатаем сообщение с полученными данными
-            # Иначе - печатаем сообщение 'Message from CLIENT!'
-            data_in = udp_socket.recvfrom(1024)
-            if data_in[0] == 'sigserv':
-                print('signal server data: ', data_in)
+            try:
+                a, b = poolqueue[pool].addr, addr
+                nat_type_id_a, nat_type_id_b = poolqueue[pool].nat_type_id, nat_type_id
+                sockfd.sendto(addr2bytes(a, nat_type_id_a), b)
+                sockfd.sendto(addr2bytes(b, nat_type_id_b), a)
+                print "linked", pool
+                del poolqueue[pool]
+            except KeyError:
+                poolqueue[pool] = ClientInfo(addr, nat_type_id)
+
+            if pool in symmetric_chat_clients:
+                if nat_type_id == '3' or symmetric_chat_clients[pool][0] == '3':
+                    # at least one is symmetric NAT
+                    recorded_client_addr = symmetric_chat_clients[pool][1]
+                    symmetric_chat_clients[addr] = recorded_client_addr
+                    symmetric_chat_clients[recorded_client_addr] = addr
+                    print("Hurray! symmetric chat link established.")
+                    del symmetric_chat_clients[pool]
+                else:
+                    del symmetric_chat_clients[pool]  # neither clients are symmetric NAT
             else:
-                print('Message from CLIENT!')
+                symmetric_chat_clients[pool] = (nat_type_id, addr)
 
-        # Закрываем сокет
-        udp_socket.close()
 
-    except Exception as a:
-        print(traceback.format_exc(a))
-        sys.exit(1)
-
-    finally:
-        if udp_socket != '':
-            udp_socket.close()
-
-sigserver_exch()
+if __name__ == "__main__":
+    if len(sys.argv) != 2:
+        print("usage: server.py port")
+        exit(0)
+    else:
+        assert sys.argv[1].isdigit(), "port should be a number!"
+        main()
