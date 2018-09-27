@@ -70,6 +70,7 @@ def main():
             sockfd.sendto(bytes("ok {0}".format(pool), 'utf-8'), addr)
             print("pool={0}, nat_type={1}, ok sent to client".format(pool, NATTYPE[int(nat_type_id)]))
             data, addr = sockfd.recvfrom(2)
+            print(data)
             if data != "ok":
                 continue
 
