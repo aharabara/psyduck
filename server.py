@@ -52,7 +52,9 @@ def main():
     symmetric_chat_clients = {}
     ClientInfo = namedtuple("ClientInfo", "addr, nat_type_id")
     while True:
+
         data, addr = sockfd.recvfrom(1024)
+        data = data.decode("utf-8")
         if data.startswith("msg "):
             # forward symmetric chat msg, act as TURN server
             try:

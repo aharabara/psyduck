@@ -46,12 +46,13 @@ class Client():
 
     def request_for_connection(self, nat_type_id=0):
         self.sockfd = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-        self.sockfd.sendto(self.pool + ' {0}'.format(nat_type_id), self.master)
+        self.sockfd.sendto(bytes(self.pool + ' {0}'.format(nat_type_id), 'utf-8'), self.master)
         data, addr = self.sockfd.recvfrom(len(self.pool) + 3)
+        data = data.decode('utf-8')
         if data != "ok " + self.pool:
             print(sys.stderr, "unable to request!")
             sys.exit(1)
-        self.sockfd.sendto("ok", self.master)
+        self.sockfd.sendto(bytes("ok", 'utf-8'), self.master)
         sys.stderr = sys.stdout
         print(sys.stderr,
               "request sent, waiting for partner in pool '%s'..." % self.pool)
@@ -110,7 +111,7 @@ class Client():
         cancel_event = Event()
 
         def send(count):
-            self.sockfd.sendto('punching...\n', self.target)
+            self.sockfd.sendto(bytes('punching...\n', 'utf-8'), self.target)
             print("UDP punching package {0} sent".format(count))
             if self.periodic_running:
                 Timer(0.5, send, args=(count + 1, )).start()
