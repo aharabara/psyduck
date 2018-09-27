@@ -87,17 +87,17 @@ ChangedAddressError = "Meet an error, when do Test1 on Changed IP and Port"
 
 
 def _initialize():
-    items = dictAttrToVal.items()
-    for i in xrange(len(items)):
+    items = list(dictAttrToVal.items())
+    for i in range(len(items)):
         dictValToAttr.update({items[i][1]: items[i][0]})
-    items = dictMsgTypeToVal.items()
-    for i in xrange(len(items)):
+    items = list(dictMsgTypeToVal.items())
+    for i in range(len(items)):
         dictValToMsgType.update({items[i][1]: items[i][0]})
 
 
 def gen_tran_id():
     a = ''
-    for i in xrange(32):
+    for i in range(32):
         a += random.choice('0123456789ABCDEF')  # RFC3489 128bits transaction ID
     #return binascii.a2b_hex(a)
     return a
@@ -257,9 +257,9 @@ def get_ip_info(source_ip="0.0.0.0", source_port=54320, stun_host=None,
 
 def main():
     nat_type, external_ip, external_port = get_ip_info()
-    print "NAT Type:", nat_type
-    print "External IP:", external_ip
-    print "External Port:", external_port
+    print("NAT Type:", nat_type)
+    print("External IP:", external_ip)
+    print("External Port:", external_port)
 
 if __name__ == '__main__':
     main()
