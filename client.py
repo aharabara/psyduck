@@ -75,21 +75,21 @@ class Client():
                     print("received msg from target,"
                           "periodic send cancelled, chat start.")
                 if addr == self.target or addr == self.master:
-                    sys.stdout.write(data)
+                    sys.stdout.write(data.decode('utf-8'))
                     if data == "punching...\n":
                         sock.sendto("end punching\n", addr)
         else:
             while True:
                 data, addr = sock.recvfrom(1024)
                 if addr == self.target or addr == self.master:
-                    sys.stdout.write(data)
+                    sys.stdout.write(data.decode('utf-8'))
                     if data == "punching...\n":  # peer是restrict
                         sock.sendto("end punching", addr)
 
     def send_msg(self, sock):
         while True:
             data = sys.stdin.readline()
-            sock.sendto(data, self.target)
+            sock.sendto(bytes(data, 'utf-8'), self.target)
 
     @staticmethod
     def start_working_threads(send, recv, event=None, *args, **kwargs):
@@ -130,13 +130,13 @@ class Client():
         def send_msg_symm(sock):
             while True:
                 data = 'msg ' + sys.stdin.readline()
-                sock.sendto(data, self.master)
+                sock.sendto(bytes(data, 'utf-8'), self.master)
 
         def recv_msg_symm(sock):
             while True:
                 data, addr = sock.recvfrom(1024)
                 if addr == self.master:
-                    sys.stdout.write(data)
+                    sys.stdout.write(data.decode('utf-8'))
 
         self.start_working_threads(send_msg_symm, recv_msg_symm, None,
                                    self.sockfd)
