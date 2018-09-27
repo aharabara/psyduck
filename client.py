@@ -1,42 +1,18 @@
 #!/usr/bin/env python
 # coding:utf-8
 
-import optparse
 import socket
-import struct
 import sys
 import time
 from threading import Event, Thread
 
-import stun
-
-FullCone = "Full Cone"  # 0
-RestrictNAT = "Restrict NAT"  # 1
-RestrictPortNAT = "Restrict Port NAT"  # 2
-SymmetricNAT = "Symmetric NAT"  # 3
-UnknownNAT = "Unknown NAT"  # 4
-NATTYPE = (FullCone, RestrictNAT, RestrictPortNAT, SymmetricNAT, UnknownNAT)
-
-
-def bytes2addr(bytes):
-    """Convert a hash to an address pair."""
-    if len(bytes) != 8:
-        raise ValueError("invalid bytes")
-    host = socket.inet_ntoa(bytes[:4])
-    port = struct.unpack("H", bytes[-4:-2])[
-        0]  # unpack returns a tuple even if it contains exactly one item
-    nat_type_id = struct.unpack("H", bytes[-2:])[0]
-    target = (host, port)
-    return target, nat_type_id
-
+import nat_utils
 
 class Client():
-    def __init__(self):
+    def __init__(self, master_ip, port, pool):
         try:
-            master_ip = '127.0.0.1' if sys.argv[
-                1] == 'localhost' else sys.argv[1]
-            self.master = (master_ip, int(sys.argv[2]))
-            self.pool = sys.argv[3].strip()
+            self.master = (master_ip, int(port))
+            self.pool = pool.strip()
             self.sockfd = self.target = None
             self.periodic_running = False
             self.peer_nat_type = None
@@ -58,9 +34,9 @@ class Client():
               "request sent, waiting for partner in pool '%s'..." % self.pool)
         data, addr = self.sockfd.recvfrom(8)
 
-        self.target, peer_nat_type_id = bytes2addr(data)
+        self.target, peer_nat_type_id = nat_utils.bytes2addr(data)
         print(self.target, peer_nat_type_id)
-        self.peer_nat_type = NATTYPE[peer_nat_type_id]
+        self.peer_nat_type = nat_utils.NATTYPE[peer_nat_type_id]
         print(sys.stderr, "connected to {1}:{2}, its NAT type is {0}".format(
             self.peer_nat_type, *self.target))
 
@@ -149,25 +125,26 @@ class Client():
         我的NAT设备才能识别对方为"我已经发过包的地址". 直到收到对方的包, periodic发送停止
         """
         if not test_nat_type:
-            nat_type, _, _ = self.get_nat_type()
+            nat_type, _, _ = nat_utils.get_nat_type()
         else:
             nat_type = test_nat_type  # 假装正在测试某种类型的NAT
+
         try:
-            self.request_for_connection(nat_type_id=NATTYPE.index(nat_type))
+            self.request_for_connection(nat_type_id=nat_utils.NATTYPE.index(nat_type))
         except ValueError:
             print("NAT type is %s" % nat_type)
             self.request_for_connection(nat_type_id=4)  # Unknown NAT
 
-        if nat_type == UnknownNAT or self.peer_nat_type == UnknownNAT:
+        if nat_type == nat_utils.UnknownNAT or self.peer_nat_type == nat_utils.UnknownNAT:
             print("Symmetric chat mode")
             self.chat_symmetric()
-        if nat_type == SymmetricNAT or self.peer_nat_type == SymmetricNAT:
+        if nat_type == nat_utils.SymmetricNAT or self.peer_nat_type == nat_utils.SymmetricNAT:
             print("Symmetric chat mode")
             self.chat_symmetric()
-        elif nat_type == FullCone:
+        elif nat_type == nat_utils.FullCone:
             print("FullCone chat mode")
             self.chat_fullcone()
-        elif nat_type in (RestrictNAT, RestrictPortNAT):
+        elif nat_type in (nat_utils.RestrictNAT, nat_utils.RestrictPortNAT):
             print("Restrict chat mode")
             self.chat_restrict()
         else:
@@ -180,64 +157,14 @@ class Client():
                 print("exit")
                 sys.exit(0)
 
-    @staticmethod
-    def get_nat_type():
-        parser = optparse.OptionParser(version=stun.__version__)
-        parser.add_option(
-            "-d",
-            "--debug",
-            dest="DEBUG",
-            action="store_true",
-            default=False,
-            help="Enable debug logging")
-        parser.add_option(
-            "-H",
-            "--host",
-            dest="stun_host",
-            default=None,
-            help="STUN host to use")
-        parser.add_option(
-            "-P",
-            "--host-port",
-            dest="stun_port",
-            type="int",
-            default=3478,
-            help="STUN host port to use (default: "
-            "3478)")
-        parser.add_option(
-            "-i",
-            "--interface",
-            dest="source_ip",
-            default="0.0.0.0",
-            help="network interface for client (default: 0.0.0.0)")
-        parser.add_option(
-            "-p",
-            "--port",
-            dest="source_port",
-            type="int",
-            default=54320,
-            help="port to listen on for client "
-            "(default: 54320)")
-        (options, args) = parser.parse_args()
-        if options.DEBUG:
-            stun.enable_logging()
-        kwargs = dict(
-            source_ip=options.source_ip,
-            source_port=int(options.source_port),
-            stun_host=options.stun_host,
-            stun_port=options.stun_port)
-        nat_type, external_ip, external_port = stun.get_ip_info(**kwargs)
-        print("NAT Type:", nat_type)
-        print("External IP:", external_ip)
-        print("External Port:", external_port)
-        return nat_type, external_ip, external_port
-
 
 if __name__ == "__main__":
-    c = Client()
+    master_ip = '127.0.0.1' if sys.argv[1] == 'localhost' else sys.argv[1]
+    client = Client(master_ip, sys.argv[2], sys.argv[3])
+
     try:
-        test_nat_type = NATTYPE[int(sys.argv[4])]  # 输入数字0,1,2,3
+        test_nat_type = nat_utils.NATTYPE[int(sys.argv[4])]  # 输入数字0,1,2,3
     except IndexError:
         test_nat_type = None
 
-    c.main(test_nat_type)
+    client.main(test_nat_type)
