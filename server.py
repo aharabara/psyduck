@@ -6,12 +6,7 @@ import struct
 import sys
 from collections import namedtuple
 
-FullCone = "Full Cone"  # 0
-RestrictNAT = "Restrict NAT"  # 1
-RestrictPortNAT = "Restrict Port NAT"  # 2
-SymmetricNAT = "Symmetric NAT"  # 3
-UnknownNAT = "Unknown NAT" # 4
-NATTYPE = (FullCone, RestrictNAT, RestrictPortNAT, SymmetricNAT, UnknownNAT)
+NATTYPE = ("Full Cone", "Restrict NAT", "Restrict Port NAT", "Symmetric NAT", "Unknown NAT")
 
 def addr2bytes(addr, nat_type_id):
     """Convert an address pair to a hash."""
@@ -33,7 +28,6 @@ def addr2bytes(addr, nat_type_id):
     bytes += struct.pack("H", nat_type_id)
     return bytes
 
-
 def main():
     port = sys.argv[1]
     try:
@@ -50,7 +44,7 @@ def main():
     # temp state {100:(nat_type_id, addr_A, addr_B)}
     # final state {addr_A:addr_B, addr_B:addr_A}
     symmetric_chat_clients = {}
-    ClientInfo = namedtuple("ClientInfo", "addr, nat_type_id")
+    ClientInfo = namedtuple('ClientInfo', ['addr', 'nat_type_id'])
     while True:
 
         data, addr = sockfd.recvfrom(1024)
@@ -104,6 +98,5 @@ if __name__ == "__main__":
     if len(sys.argv) != 2:
         print("usage: server.py port")
         exit(0)
-    else:
-        assert sys.argv[1].isdigit(), "port should be a number!"
-        main()
+    assert sys.argv[1].isdigit(), "port should be a number!"
+    main()
