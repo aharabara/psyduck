@@ -6,7 +6,8 @@ import sys
 import time
 from threading import Event, Thread
 
-import nat_utils
+from psy_net import nat_utils
+
 
 class Client():
     def __init__(self, master_ip, port, pool):
@@ -62,10 +63,8 @@ class Client():
                     if data == "punching...\n":  # peer是restrict
                         sock.sendto("end punching", addr)
 
-    def send_msg(self, sock):
-        while True:
-            data = sys.stdin.readline()
-            sock.sendto(bytes(data, 'utf-8'), self.target)
+    def send_msg(self, sock, message: str):
+        sock.sendto(bytes(message, 'utf-8'), self.target)
 
     @staticmethod
     def start_working_threads(send, recv, event=None, *args, **kwargs):
@@ -90,7 +89,7 @@ class Client():
             self.sockfd.sendto(bytes('punching...\n', 'utf-8'), self.target)
             print("UDP punching package {0} sent".format(count))
             if self.periodic_running:
-                Timer(0.5, send, args=(count + 1, )).start()
+                Timer(0.5, send, args=(count + 1,)).start()
 
         self.periodic_running = True
         send(0)

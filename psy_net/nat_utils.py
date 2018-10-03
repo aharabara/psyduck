@@ -1,10 +1,7 @@
 import optparse
-
 import stun
 import struct
 import socket
-
-
 
 FullCone = "Full Cone"  # 0
 RestrictNAT = "Restrict NAT"  # 1
