@@ -13,6 +13,7 @@ SymmetricNAT = "Symmetric NAT"  # 3
 UnknownNAT = "Unknown NAT" # 4
 NATTYPE = (FullCone, RestrictNAT, RestrictPortNAT, SymmetricNAT, UnknownNAT)
 
+
 def addr2bytes(addr, nat_type_id):
     """Convert an address pair to a hash."""
     host, port = addr

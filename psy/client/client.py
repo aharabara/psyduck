@@ -1,12 +1,11 @@
 #!/usr/bin/env python
 # coding:utf-8
-
 import socket
 import sys
 import time
 from threading import Event, Thread
 
-from psy_net import nat_utils
+from psy import network
 
 
 class Client():
@@ -35,9 +34,9 @@ class Client():
               "request sent, waiting for partner in pool '%s'..." % self.pool)
         data, addr = self.sockfd.recvfrom(8)
 
-        self.target, peer_nat_type_id = nat_utils.bytes2addr(data)
+        self.target, peer_nat_type_id = network.bytes2addr(data)
         print(self.target, peer_nat_type_id)
-        self.peer_nat_type = nat_utils.NATTYPE[peer_nat_type_id]
+        self.peer_nat_type = network.NATTYPE[peer_nat_type_id]
         print(sys.stderr, "connected to {1}:{2}, its NAT type is {0}".format(
             self.peer_nat_type, *self.target))
 
@@ -63,8 +62,12 @@ class Client():
                     if data == "punching...\n":  # peer是restrict
                         sock.sendto("end punching", addr)
 
-    def send_msg(self, sock, message: str):
-        sock.sendto(bytes(message, 'utf-8'), self.target)
+    def send_msg(self, sock, message: str = None):
+        while True:
+            if message:
+                sock.sendto(bytes(message, 'utf-8'), self.target)
+            else:
+                sock.sendto(bytes(sys.stdin.readline(), 'utf-8'), self.target)
 
     @staticmethod
     def start_working_threads(send, recv, event=None, *args, **kwargs):
@@ -124,26 +127,26 @@ class Client():
         我的NAT设备才能识别对方为"我已经发过包的地址". 直到收到对方的包, periodic发送停止
         """
         if not test_nat_type:
-            nat_type, _, _ = nat_utils.get_nat_type()
+            nat_type, _, _ = network.get_nat_type()
         else:
             nat_type = test_nat_type  # 假装正在测试某种类型的NAT
 
         try:
-            self.request_for_connection(nat_type_id=nat_utils.NATTYPE.index(nat_type))
+            self.request_for_connection(nat_type_id=network.NATTYPE.index(nat_type))
         except ValueError:
             print("NAT type is %s" % nat_type)
             self.request_for_connection(nat_type_id=4)  # Unknown NAT
 
-        if nat_type == nat_utils.UnknownNAT or self.peer_nat_type == nat_utils.UnknownNAT:
+        if nat_type == network.UnknownNAT or self.peer_nat_type == network.UnknownNAT:
             print("Symmetric chat mode")
             self.chat_symmetric()
-        if nat_type == nat_utils.SymmetricNAT or self.peer_nat_type == nat_utils.SymmetricNAT:
+        if nat_type == network.SymmetricNAT or self.peer_nat_type == network.SymmetricNAT:
             print("Symmetric chat mode")
             self.chat_symmetric()
-        elif nat_type == nat_utils.FullCone:
+        elif nat_type == network.FullCone:
             print("FullCone chat mode")
             self.chat_fullcone()
-        elif nat_type in (nat_utils.RestrictNAT, nat_utils.RestrictPortNAT):
+        elif nat_type in (network.RestrictNAT, network.RestrictPortNAT):
             print("Restrict chat mode")
             self.chat_restrict()
         else:
@@ -155,15 +158,3 @@ class Client():
             except KeyboardInterrupt:
                 print("exit")
                 sys.exit(0)
-
-
-if __name__ == "__main__":
-    master_ip = '127.0.0.1' if sys.argv[1] == 'localhost' else sys.argv[1]
-    client = Client(master_ip, sys.argv[2], sys.argv[3])
-
-    try:
-        test_nat_type = nat_utils.NATTYPE[int(sys.argv[4])]  # 输入数字0,1,2,3
-    except IndexError:
-        test_nat_type = None
-
-    client.main(test_nat_type)
