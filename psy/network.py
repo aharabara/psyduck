@@ -1,13 +1,15 @@
 import optparse
+from typing import List, Tuple, Dict
+
 import stun
 import struct
 import socket
 
-FullCone = "Full Cone"  # 0
-RestrictNAT = "Restrict NAT"  # 1
-RestrictPortNAT = "Restrict Port NAT"  # 2
-SymmetricNAT = "Symmetric NAT"  # 3
-UnknownNAT = "Unknown NAT"  # 4
+FullCone: str = "Full Cone"  # 0
+RestrictNAT: str = "Restrict NAT"  # 1
+RestrictPortNAT: str = "Restrict Port NAT"  # 2
+SymmetricNAT: str = "Symmetric NAT"  # 3
+UnknownNAT: str = "Unknown NAT"  # 4
 NATTYPE = (FullCone, RestrictNAT, RestrictPortNAT, SymmetricNAT, UnknownNAT)
 
 
@@ -50,7 +52,7 @@ def get_nat_type():
         "(default: 54320)")
     (options, args) = parser.parse_args()
 
-    kwargs = dict(
+    kwargs: Dict = dict(
         source_ip=options.source_ip,
         source_port=int(options.source_port),
         stun_host=options.stun_host,
@@ -62,13 +64,13 @@ def get_nat_type():
     return nat_type, external_ip, external_port
 
 
-def bytes2addr(bytes_data):
+def bytes2address(bytes_data: bytes) -> Tuple[Tuple[str, str], str]:
     """Convert a hash to an address pair."""
     if len(bytes_data) != 8:
         raise ValueError("invalid bytes")
-    host = socket.inet_ntoa(bytes_data[:4])
-    port = struct.unpack("H", bytes_data[-4:-2])[
-        0]  # unpack returns a tuple even if it contains exactly one item
-    nat_type_id = struct.unpack("H", bytes_data[-2:])[0]
-    target = (host, port)
-    return target, nat_type_id
+    # unpack returns a tuple even if it contains exactly one item
+    host: str = socket.inet_ntoa(bytes_data[:4])
+    port: str = struct.unpack("H", bytes_data[-4:-2])[0]
+    nat_type_id: str = struct.unpack("H", bytes_data[-2:])[0]
+
+    return (host, port), nat_type_id

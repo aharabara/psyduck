@@ -1,8 +1,10 @@
 import curses
-
 import npyscreen
 
+from typing import List
 from psy.client import Contact
+from psy.client.User import User
+from psy.client.ui import Contacts, MessagesHistory, MessageBox
 
 
 class App(npyscreen.StandardApp):
@@ -10,74 +12,60 @@ class App(npyscreen.StandardApp):
         self.addForm("MAIN", MainForm, name="PsyDuck!")
 
 
-class MessagesHistory(npyscreen.BoxTitle):
-    _contained_widget = npyscreen.Pager
-
-
-class Contacts(npyscreen.BoxTitle):
-    _contained_widget = npyscreen.SelectOne
-
-
-class MessageBox(npyscreen.BoxTitle):
-    _contained_widget = npyscreen.MultiLineEdit
-
-
 class MainForm(npyscreen.FormBaseNew):
-    input_box = None
-    history = None
-    contacts = None
-    nickname = "aharabara"
-    # switch from dict to Contact entity.
-    contacts_list = [
-        Contact(name="Me", nickname="@user", pool=1),
-        Contact(name="Ivan", nickname="@ivan", pool=2),
-        Contact(name="Andrew", nickname="@andrew", pool=3),
-    ]
+    # UI
+    messages_history: MessagesHistory
+    message_box: MessageBox
+    contacts_box: Contacts
+
+    # User related entities
+    user: User
+    current_contact: Contact
 
     # Конструктор
     def create(self):
-        y, x = self.useable_space()
-        # Добавляем виджет TitleText на форму
-        self.contacts = self.add(Contacts, name="Contacts", values=self.contacts_list, width=x // 4 - 4)
-        self.history = self.add(MessagesHistory, name="Chat", values=["Messages"], editable=False,
-                                relx=x // 4,
-                                rely=2,
-                                max_height=y // 4 * 3,
-                                max_width=x // 4 * 3)
-        self.input_box = self.add(MessageBox, name="Message", value="Hello World!", relx=x // 4, max_width=x // 4 * 3)
+        self.user = User("Alexander", "aharabara", 0)
+        self.current_contact = self.user
 
+        y, x = self.useable_space()
+
+        # Добавляем виджет TitleText на форму
+        self.contacts_box = self.add(Contacts, name="Contacts", values=self.user.contact_list, width=x // 4 - 4)
+        self.messages_history = self.add(MessagesHistory, name="Chat", values=["Messages"], editable=False,
+                                         relx=x // 4, rely=2,
+                                         max_height=y // 4 * 3, max_width=x // 4 * 3)
+
+        self.message_box = self.add(MessageBox, name="Message", value="Hello World!", relx=x // 4, max_width=x // 4 * 3)
+
+        self.setup_keyboard_handlers()
+
+        self.contacts_box.value_changed_callback = self.select_contact
+
+    def setup_keyboard_handlers(self):
         self.add_handlers({
             "^Q": self.quit,
         })
-        self.input_box.add_handlers({
+        self.message_box.add_handlers({
             curses.KEY_IC: self.send,
         })
 
-        self.contacts.value_changed_callback = self.select_pool
-
-        # master_ip = '127.0.0.1' if sys.argv[1] == 'localhost' else sys.argv[1]
-        # client = Client("localhost", "5678", "1")
-        #
-        # test_nat_type = nat_utils.NATTYPE[0]  # 输入数字0,1,2,3
-        #
-        # client.main(test_nat_type)
-
-    def select_pool(self, widget):
-        selected = list(self.contacts.get_value())
-        print(selected.pop())
-        if selected.count(selected):
-            index = self.contacts.get_value().pop()
-            print(self.contacts.get_values()[index])
+    def select_contact(self, widget):
+        selected: List = self.contacts_box.get_value()
+        if len(selected):
+            index: int = self.contacts_box.get_value().pop()
+            self.current_contact = self.contacts_box.get_values()[index]
+            self.messages_history.values = self.current_contact.messages
+            self.messages_history.display()
 
     def quit(self, number):
         quit()
 
     def send(self, number):
-        self.history.values.append(self.nickname + " >> " + self.input_box.value)
-        self.history.display()
+        self.messages_history.values.append(self.user.nickname + " >> " + self.message_box.value)
+        self.messages_history.display()
 
-        self.input_box.value = ""
-        self.input_box.display()
+        self.message_box.value = ""
+        self.message_box.display()
         # self.client.send_msg(self.history.values)
 
     # # переопределенный метод, срабатывающий при нажатии на кнопку «ok»

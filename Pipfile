@@ -6,8 +6,9 @@ name = "pypi"
 [dev-packages]
 
 [packages]
-"pystun3" = "*"
-"npyscreen" = "*"
+"pystun3" = "==1.0.0"
+"npyscreen" = "==4.10.5"
+"mypy" = "==0.630"
 
 [requires]
 python_version = "3.6"

@@ -3,25 +3,28 @@
 import socket
 import sys
 import time
-from threading import Event, Thread
 
+from threading import Event, Thread
+from typing import Tuple
 from psy import network
 
 
-class Client():
-    def __init__(self, master_ip, port, pool):
-        try:
-            self.master = (master_ip, int(port))
-            self.pool = pool.strip()
-            self.sockfd = self.target = None
-            self.periodic_running = False
-            self.peer_nat_type = None
-        except (IndexError, ValueError):
-            print(sys.stderr, "usage: %s <host> <port> <pool>" % sys.argv[0])
-            sys.exit(65)
+class Client:
+    master: Tuple[str, int]
+    pool: str
+
+    periodic_running: str
+    peer_nat_type: str
+
+    def __init__(self, master_ip: str, port: int, pool: str) -> None:
+        self.master = (master_ip, port)
+        self.pool = pool.strip()
+        self.sockfd = self.target = None
+        self.periodic_running = False
+        self.peer_nat_type = None
 
     def request_for_connection(self, nat_type_id=0):
-        self.sockfd = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        self.sockfd: socket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
         self.sockfd.sendto(bytes(self.pool + ' {0}'.format(nat_type_id), 'utf-8'), self.master)
         data, addr = self.sockfd.recvfrom(len(self.pool) + 3)
         data = data.decode('utf-8')
@@ -34,7 +37,7 @@ class Client():
               "request sent, waiting for partner in pool '%s'..." % self.pool)
         data, addr = self.sockfd.recvfrom(8)
 
-        self.target, peer_nat_type_id = network.bytes2addr(data)
+        self.target, peer_nat_type_id = network.bytes2address(data)
         print(self.target, peer_nat_type_id)
         self.peer_nat_type = network.NATTYPE[peer_nat_type_id]
         print(sys.stderr, "connected to {1}:{2}, its NAT type is {0}".format(
