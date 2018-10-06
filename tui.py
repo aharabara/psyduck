@@ -2,7 +2,7 @@ import curses
 
 import npyscreen
 
-from psy.client.contact import Contact
+from psy.client import Contact
 
 
 class App(npyscreen.StandardApp):

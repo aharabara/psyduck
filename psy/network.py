@@ -49,8 +49,7 @@ def get_nat_type():
         help="port to listen on for client "
         "(default: 54320)")
     (options, args) = parser.parse_args()
-    if options.DEBUG:
-        stun.enable_logging()
+
     kwargs = dict(
         source_ip=options.source_ip,
         source_port=int(options.source_port),

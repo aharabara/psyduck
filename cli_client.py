@@ -1,7 +1,7 @@
 import sys
 
 from psy import network
-from psy.client.client import Client
+from psy.client import Client
 
 if __name__ == "__main__":
     try:
