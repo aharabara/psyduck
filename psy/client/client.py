@@ -1,12 +1,16 @@
 #!/usr/bin/env python
 # coding:utf-8
+import os
 import socket
 import sys
 import time
+import logging
+from datetime import datetime
 
 from threading import Event, Thread
 from typing import Tuple
 from psy import network
+
 
 
 class Client:
@@ -19,6 +23,9 @@ class Client:
     def __init__(self, master_ip: str, port: int, pool: str) -> None:
         self.master = (master_ip, port)
         self.pool = pool.strip()
+        path = 'logs/'+master_ip+'/'+self.pool
+        os.makedirs(path, exist_ok=True)
+        logging.basicConfig(filename=path+'/'+str(datetime.now())+'.log', level=logging.DEBUG)
         self.sockfd = self.target = None
         self.periodic_running = False
         self.peer_nat_type = None
@@ -29,30 +36,26 @@ class Client:
         data, addr = self.sockfd.recvfrom(len(self.pool) + 3)
         data = data.decode('utf-8')
         if data != "ok " + self.pool:
-            print(sys.stderr, "unable to request!")
+            logging.warn("unable to request!")
             sys.exit(1)
         self.sockfd.sendto(bytes("ok", 'utf-8'), self.master)
-        sys.stderr = sys.stdout
-        print(sys.stderr,
-              "request sent, waiting for partner in pool '%s'..." % self.pool)
+        logging.info("request sent, waiting for partner in pool '%s'..." % self.pool)
         data, addr = self.sockfd.recvfrom(8)
 
         self.target, peer_nat_type_id = network.bytes2address(data)
-        print(self.target, peer_nat_type_id)
+        logging.info(str(self.target)+" "+str(peer_nat_type_id))
         self.peer_nat_type = network.NATTYPE[peer_nat_type_id]
-        print(sys.stderr, "connected to {1}:{2}, its NAT type is {0}".format(
-            self.peer_nat_type, *self.target))
+        logging.info("connected to {1}:{2}, its NAT type is {0}".format(self.peer_nat_type, *self.target))
 
     def recv_msg(self, sock, is_restrict=False, event=None):
         if is_restrict:
             while True:
                 data, addr = sock.recvfrom(1024)
                 if self.periodic_running:
-                    print("periodic_send is alive")
+                    logging.info("periodic_send is alive")
                     self.periodic_running = False
                     event.set()
-                    print("received msg from target,"
-                          "periodic send cancelled, chat start.")
+                    logging.info("received msg from target,", "periodic send cancelled, chat start.")
                 if addr == self.target or addr == self.master:
                     sys.stdout.write(data.decode('utf-8'))
                     if data == "punching...\n":
@@ -93,7 +96,7 @@ class Client:
 
         def send(count):
             self.sockfd.sendto(bytes('punching...\n', 'utf-8'), self.target)
-            print("UDP punching package {0} sent".format(count))
+            logging.info("UDP punching package {0} sent".format(count))
             if self.periodic_running:
                 Timer(0.5, send, args=(count + 1,)).start()
 
@@ -137,27 +140,27 @@ class Client:
         try:
             self.request_for_connection(nat_type_id=network.NATTYPE.index(nat_type))
         except ValueError:
-            print("NAT type is %s" % nat_type)
+            logging.error("NAT type is %s" % nat_type)
             self.request_for_connection(nat_type_id=4)  # Unknown NAT
 
         if nat_type == network.UnknownNAT or self.peer_nat_type == network.UnknownNAT:
-            print("Symmetric chat mode")
+            logging.info("Symmetric chat mode")
             self.chat_symmetric()
         if nat_type == network.SymmetricNAT or self.peer_nat_type == network.SymmetricNAT:
-            print("Symmetric chat mode")
+            logging.info("Symmetric chat mode")
             self.chat_symmetric()
         elif nat_type == network.FullCone:
-            print("FullCone chat mode")
+            logging.info("FullCone chat mode")
             self.chat_fullcone()
         elif nat_type in (network.RestrictNAT, network.RestrictPortNAT):
-            print("Restrict chat mode")
+            logging.info("Restrict chat mode")
             self.chat_restrict()
         else:
-            print("NAT type wrong!")
+            logging.error("NAT type wrong!")
 
         while True:
             try:
                 time.sleep(0.5)
             except KeyboardInterrupt:
-                print("exit")
+                logging.info("exit")
                 sys.exit(0)

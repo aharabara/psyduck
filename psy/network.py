@@ -58,9 +58,9 @@ def get_nat_type():
         stun_host=options.stun_host,
         stun_port=options.stun_port)
     nat_type, external_ip, external_port = stun.get_ip_info(**kwargs)
-    print("NAT Type:", nat_type)
-    print("External IP:", external_ip)
-    print("External Port:", external_port)
+    # print("NAT Type:", nat_type)
+    # print("External IP:", external_ip)
+    # print("External Port:", external_port)
     return nat_type, external_ip, external_port
 
 

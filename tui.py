@@ -1,8 +1,13 @@
 import curses
+import sys
+from threading import Thread
+
 import npyscreen
 
-from typing import List
-from psy.client import Contact
+from typing import List, Optional
+
+from psy import network
+from psy.client import Contact, Client
 from psy.client.User import User
 from psy.client.ui import Contacts, MessagesHistory, MessageBox
 
@@ -21,6 +26,7 @@ class MainForm(npyscreen.FormBaseNew):
     # User related entities
     user: User
     current_contact: Contact
+    current_pool: Thread
 
     # Конструктор
     def create(self):
@@ -41,6 +47,7 @@ class MainForm(npyscreen.FormBaseNew):
 
         self.contacts_box.value_changed_callback = self.select_contact
 
+
     def setup_keyboard_handlers(self):
         self.add_handlers({
             "^Q": self.quit,
@@ -56,6 +63,21 @@ class MainForm(npyscreen.FormBaseNew):
             self.current_contact = self.contacts_box.get_values()[index]
             self.messages_history.values = self.current_contact.messages
             self.messages_history.display()
+            master_ip: str = '127.0.0.1'
+            port: int = 5678
+            pool: str = str(self.current_contact.pool)
+
+            client: Client = Client(master_ip, port, pool)
+            nat_type: Optional[str] = None
+            try:
+                nat_type = network.NATTYPE[int(sys.argv[4])]
+            except IndexError:
+                pass
+            # todo
+            # self.current_pool.STOP_OLD_THREAD()
+            self.current_pool = Thread(target=client.main, args=[nat_type])
+            self.current_pool.setDaemon(True)
+            self.current_pool.start()
 
     def quit(self, number):
         quit()
