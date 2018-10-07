@@ -8,9 +8,8 @@ import logging
 from datetime import datetime
 
 from threading import Event, Thread
-from typing import Tuple
+from typing import Tuple, List
 from psy import network
-
 
 
 class Client:
@@ -19,16 +18,22 @@ class Client:
 
     periodic_running: str
     peer_nat_type: str
+    messages: List
+    history: List
+    old_len: int = 0
 
-    def __init__(self, master_ip: str, port: int, pool: str) -> None:
+    def __init__(self, master_ip: str, port: int, pool: str, messages: List, is_cli:bool = False) -> None:
+        self.is_cli = is_cli
         self.master = (master_ip, port)
         self.pool = pool.strip()
-        path = 'logs/'+master_ip+'/'+self.pool
+        path = 'logs/' + master_ip + '/' + self.pool
         os.makedirs(path, exist_ok=True)
-        logging.basicConfig(filename=path+'/'+str(datetime.now())+'.log', level=logging.DEBUG)
+        logging.basicConfig(filename=path + '/' + str(datetime.now()) + '.log', level=logging.DEBUG)
         self.sockfd = self.target = None
         self.periodic_running = False
         self.peer_nat_type = None
+        self.messages = messages
+        self.history = []
 
     def request_for_connection(self, nat_type_id=0):
         self.sockfd: socket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
@@ -43,7 +48,7 @@ class Client:
         data, addr = self.sockfd.recvfrom(8)
 
         self.target, peer_nat_type_id = network.bytes2address(data)
-        logging.info(str(self.target)+" "+str(peer_nat_type_id))
+        logging.info(str(self.target) + " " + str(peer_nat_type_id))
         self.peer_nat_type = network.NATTYPE[peer_nat_type_id]
         logging.info("connected to {1}:{2}, its NAT type is {0}".format(self.peer_nat_type, *self.target))
 
@@ -57,23 +62,29 @@ class Client:
                     event.set()
                     logging.info("received msg from target,", "periodic send cancelled, chat start.")
                 if addr == self.target or addr == self.master:
-                    sys.stdout.write(data.decode('utf-8'))
+                    if self.is_cli:
+                        print(data.decode('utf-8'))
+                    self.history.append(data.decode('utf-8'))
                     if data == "punching...\n":
                         sock.sendto("end punching\n", addr)
         else:
             while True:
                 data, addr = sock.recvfrom(1024)
                 if addr == self.target or addr == self.master:
-                    sys.stdout.write(data.decode('utf-8'))
+                    if self.is_cli:
+                        print(data.decode('utf-8'))
+                    self.history.append(data.decode('utf-8'))
                     if data == "punching...\n":  # peer是restrict
                         sock.sendto("end punching", addr)
 
-    def send_msg(self, sock, message: str = None):
+    def send_msg(self, sock):
         while True:
-            if message:
-                sock.sendto(bytes(message, 'utf-8'), self.target)
-            else:
-                sock.sendto(bytes(sys.stdin.readline(), 'utf-8'), self.target)
+            if len(self.messages) > 0:
+                if len(self.messages) > self.old_len:
+                    self.old_len = len(self.messages)
+                    message = self.messages[self.old_len - 1]
+                    logging.warn(message)
+                    sock.sendto(bytes(message, 'utf-8'), self.target)
 
     @staticmethod
     def start_working_threads(send, recv, event=None, *args, **kwargs):
@@ -112,6 +123,7 @@ class Client:
         """
 
         def send_msg_symm(sock):
+            # todo switch to message list
             while True:
                 data = 'msg ' + sys.stdin.readline()
                 sock.sendto(bytes(data, 'utf-8'), self.master)
@@ -120,7 +132,7 @@ class Client:
             while True:
                 data, addr = sock.recvfrom(1024)
                 if addr == self.master:
-                    sys.stdout.write(data.decode('utf-8'))
+                    self.messages.append(data.decode('utf-8'))
 
         self.start_working_threads(send_msg_symm, recv_msg_symm, None,
                                    self.sockfd)

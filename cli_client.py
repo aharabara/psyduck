@@ -10,7 +10,7 @@ if __name__ == "__main__":
         port: int = int(sys.argv[2].strip())
         pool: str = sys.argv[3]
 
-        client: Client = Client(master_ip, port, pool)
+        client: Client = Client(master_ip, port, pool, [], True)
         nat_type: Optional[str] = None
         try:
             nat_type = network.NATTYPE[int(sys.argv[4])]

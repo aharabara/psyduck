@@ -67,7 +67,7 @@ class MainForm(npyscreen.FormBaseNew):
             port: int = 5678
             pool: str = str(self.current_contact.pool)
 
-            client: Client = Client(master_ip, port, pool)
+            client: Client = Client(master_ip, port, pool, self.current_contact.messages)
             nat_type: Optional[str] = None
             try:
                 nat_type = network.NATTYPE[int(sys.argv[4])]
