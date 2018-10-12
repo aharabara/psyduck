@@ -1,6 +1,7 @@
 #!/usr/bin/env python
 # coding:utf-8
 import os
+import pickle
 import socket
 import sys
 import time
@@ -10,6 +11,7 @@ from datetime import datetime
 from threading import Event, Thread
 from typing import Tuple, List
 from psy import network
+from psy.client.message import Message
 
 
 class Client:
@@ -18,17 +20,17 @@ class Client:
 
     periodic_running: str
     peer_nat_type: str
-    messages: List
-    history: List
-    old_len: int = 0
+    messages: List[Message]
 
     def __init__(self, master_ip: str, port: int, pool: str, messages: List, is_cli:bool = False) -> None:
         self.is_cli = is_cli
         self.master = (master_ip, port)
         self.pool = pool.strip()
+        # logger
         path = 'logs/' + master_ip + '/' + self.pool
         os.makedirs(path, exist_ok=True)
         logging.basicConfig(filename=path + '/' + str(datetime.now()) + '.log', level=logging.DEBUG)
+        ####
         self.sockfd = self.target = None
         self.periodic_running = False
         self.peer_nat_type = None
@@ -72,19 +74,27 @@ class Client:
                 data, addr = sock.recvfrom(1024)
                 if addr == self.target or addr == self.master:
                     if self.is_cli:
-                        print(data.decode('utf-8'))
-                    self.history.append(data.decode('utf-8'))
+                        print(pickle.loads(data))
+                    self.messages.append(pickle.loads(data))
                     if data == "punching...\n":  # peer是restrict
                         sock.sendto("end punching", addr)
 
     def send_msg(self, sock):
         while True:
             if len(self.messages) > 0:
-                if len(self.messages) > self.old_len:
-                    self.old_len = len(self.messages)
-                    message = self.messages[self.old_len - 1]
-                    logging.warn(message)
-                    sock.sendto(bytes(message, 'utf-8'), self.target)
+                messages = self.get_messages_to_send()
+                if len(messages):
+                    for message in messages:
+                        logging.warn(message)
+                        message.was_sent = True
+                        sock.sendto(bytes(pickle.dumps(message), 'utf-8'), self.target)
+
+    def get_messages_to_send(self):
+        to_send: List = []
+        for message in self.messages:
+            if not message.was_sent:
+                to_send.append(message)
+        return to_send
 
     @staticmethod
     def start_working_threads(send, recv, event=None, *args, **kwargs):
@@ -98,8 +108,7 @@ class Client:
         tr.start()
 
     def chat_fullcone(self):
-        self.start_working_threads(self.send_msg, self.recv_msg, None,
-                                   self.sockfd)
+        self.start_working_threads(self.send_msg, self.recv_msg, None, self.sockfd)
 
     def chat_restrict(self):
         from threading import Timer
