@@ -5,13 +5,12 @@ import pickle
 import socket
 import sys
 import time
-import logging
-from datetime import datetime
-
 from threading import Event, Thread
 from typing import Tuple, List
 from psy import network
 from psy.client.message import Message
+from psy.client.config import bus
+from psy.client.config import logging
 
 
 class Client:
@@ -22,20 +21,13 @@ class Client:
     peer_nat_type: str
     messages: List[Message]
 
-    def __init__(self, master_ip: str, port: int, pool: str, messages: List, is_cli:bool = False) -> None:
-        self.is_cli = is_cli
+    def __init__(self, master_ip: str, port: int, pool: str, messages: List) -> None:
         self.master = (master_ip, port)
         self.pool = pool.strip()
-        # logger
-        path = 'logs/' + master_ip + '/' + self.pool
-        os.makedirs(path, exist_ok=True)
-        logging.basicConfig(filename=path + '/' + str(datetime.now()) + '.log', level=logging.DEBUG)
-        ####
         self.sockfd = self.target = None
         self.periodic_running = False
         self.peer_nat_type = None
         self.messages = messages
-        self.history = []
 
     def request_for_connection(self, nat_type_id=0):
         self.sockfd: socket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
@@ -64,18 +56,19 @@ class Client:
                     event.set()
                     logging.info("received msg from target,", "periodic send cancelled, chat start.")
                 if addr == self.target or addr == self.master:
-                    if self.is_cli:
-                        print(data.decode('utf-8'))
-                    self.history.append(data.decode('utf-8'))
+                    message = pickle.loads(data)
+                    self.messages.append(message)
+                    bus.emit('client:messages:received', message)
                     if data == "punching...\n":
                         sock.sendto("end punching\n", addr)
+
         else:
             while True:
                 data, addr = sock.recvfrom(1024)
                 if addr == self.target or addr == self.master:
-                    if self.is_cli:
-                        print(pickle.loads(data))
-                    self.messages.append(pickle.loads(data))
+                    message = pickle.loads(data)
+                    self.messages.append(message)
+                    bus.emit('client:messages:received', message)
                     if data == "punching...\n":  # peer是restrict
                         sock.sendto("end punching", addr)
 
@@ -85,9 +78,9 @@ class Client:
                 messages = self.get_messages_to_send()
                 if len(messages):
                     for message in messages:
-                        logging.warn(message)
                         message.was_sent = True
-                        sock.sendto(bytes(pickle.dumps(message), 'utf-8'), self.target)
+                        bus.emit('client:messages:sent', message)
+                        sock.sendto(pickle.dumps(message), self.target)
 
     def get_messages_to_send(self):
         to_send: List = []

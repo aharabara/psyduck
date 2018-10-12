@@ -1,20 +1,17 @@
 import curses
 import sys
-from threading import Thread
-
 import npyscreen
 
+from threading import Thread
 from typing import List, Optional
 
 from psy import network
-from psy.client import Contact, Client
-from psy.client.User import User
+from psy.client import Client, Contact
+from psy.client.config import bus
+
+from psy.client.user import User
+from psy.client.message import Message
 from psy.client.ui import Contacts, MessagesHistory, MessageBox
-
-
-class App(npyscreen.StandardApp):
-    def onStart(self):
-        self.addForm("MAIN", MainForm, name="PsyDuck!")
 
 
 class MainForm(npyscreen.FormBaseNew):
@@ -37,7 +34,7 @@ class MainForm(npyscreen.FormBaseNew):
 
         # Добавляем виджет TitleText на форму
         self.contacts_box = self.add(Contacts, name="Contacts", values=self.user.contact_list, width=x // 4 - 4)
-        self.messages_history = self.add(MessagesHistory, name="Chat", values=["Messages"], editable=False,
+        self.messages_history = self.add(MessagesHistory, name="Chat", values=[], editable=False,
                                          relx=x // 4, rely=2,
                                          max_height=y // 4 * 3, max_width=x // 4 * 3)
 
@@ -46,7 +43,6 @@ class MainForm(npyscreen.FormBaseNew):
         self.setup_keyboard_handlers()
 
         self.contacts_box.value_changed_callback = self.select_contact
-
 
     def setup_keyboard_handlers(self):
         self.add_handlers({
@@ -62,7 +58,6 @@ class MainForm(npyscreen.FormBaseNew):
             index: int = self.contacts_box.get_value().pop()
             self.current_contact = self.contacts_box.get_values()[index]
             self.messages_history.values = self.current_contact.messages
-            self.messages_history.display()
             master_ip: str = '127.0.0.1'
             port: int = 5678
             pool: str = str(self.current_contact.pool)
@@ -83,38 +78,30 @@ class MainForm(npyscreen.FormBaseNew):
         quit()
 
     def send(self, number):
-        self.messages_history.values.append(self.user.nickname + " >> " + self.message_box.value)
-        self.messages_history.display()
-
+        message = Message(self.user, self.message_box.value)
+        self.messages_history.values.append(message)
         self.message_box.value = ""
-        self.message_box.display()
-        # self.client.send_msg(self.history.values)
-
-    # # переопределенный метод, срабатывающий при нажатии на кнопку «ok»
-    # def on_ok(self):
-    #     self.parentApp.setNextForm(None)
-    #
-    # # переопределенный метод, срабатывающий при нажатии на кнопку «cancel»
-    # def on_cancel(self):
-    #     self.title.value = "Hello World!"
+        bus.emit('client:messages:sent', message)
 
 
-App().run()
-#
-# async def hello(name, timeout):
-#     cnt = 0
-#     while True and cnt < 5:
-#         await asyncio.sleep(timeout)
-#         print("Hello, {}".format(name))
-#         cnt += 1
-#
-# if __name__ == '__main__':
-#
-#     tasks = [
-#         hello("friends", 0.5),
-#         hello("neighbours", 0.3),
-#     ]
-#
-#     loop = asyncio.get_event_loop()
-#     loop.run_until_complete(asyncio.wait(tasks))
-#     loop.close()
+class App(npyscreen.StandardApp):
+    form: MainForm
+
+    def onStart(self):
+        self.form = self.addForm("MAIN", MainForm, name="PsyDuck!")
+
+    def refresh(self):
+        self.form.messages_history.display()
+        self.form.message_box.display()
+
+
+app = App()
+
+
+@bus.on('client:messages:sent')
+@bus.on('client:messages:received')
+def on_change(*args):
+    app.refresh()
+
+
+app.run()

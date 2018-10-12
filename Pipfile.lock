@@ -1,7 +1,7 @@
 {
     "_meta": {
         "hash": {
-            "sha256": "eae7ad0486c7c7d0e80b3ae2ccdb6b515f96b822515336ea222d1cf9c87657d0"
+            "sha256": "6871883b7be96c4883bdfdf9b78e072448528a665ee3497d2e57e119819fa6ef"
         },
         "pipfile-spec": 6,
         "requires": {
@@ -16,6 +16,13 @@
         ]
     },
     "default": {
+        "event-bus": {
+            "hashes": [
+                "sha256:0a04385cca50e7cf4e1bccde288bf95bbe64cd81144b4d32c86448d946180c5c"
+            ],
+            "index": "pypi",
+            "version": "==1.0.2"
+        },
         "mypy": {
             "hashes": [
                 "sha256:00b95bfdc0d5b9aa53c906e56fb91937743f2121d66684db5f947ec5d75f565d",
