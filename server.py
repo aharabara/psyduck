@@ -8,6 +8,7 @@ from collections import namedtuple
 
 NATTYPE = ("Full Cone", "Restrict NAT", "Restrict Port NAT", "Symmetric NAT", "Unknown NAT")
 
+
 def addr2bytes(addr, nat_type_id):
     """Convert an address pair to a hash."""
     host, port = addr
@@ -52,7 +53,7 @@ def main():
         if data.startswith("msg "):
             # forward symmetric chat msg, act as TURN server
             try:
-                sockfd.sendto(data[4:], symmetric_chat_clients[addr])
+                sockfd.sendto(bytes(data[4:], 'utf-8'), symmetric_chat_clients[addr])
                 print("msg successfully forwarded to {0}".format(symmetric_chat_clients[addr]))
                 print(data[4:])
             except KeyError:

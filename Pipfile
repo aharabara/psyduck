@@ -7,8 +7,10 @@ name = "pypi"
 pylint = "*"
 
 [packages]
-twisted = "*"
-stun = {git = "https://github.com/talkiq/pystun3.git", editable = true}
+"pystun3" = "==1.0.0"
+"npyscreen" = "==4.10.5"
+"mypy" = "==0.630"
+event-bus = "==1.0.2"
 
 [requires]
 python_version = "3.6"
