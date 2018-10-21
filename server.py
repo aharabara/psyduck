@@ -25,35 +25,40 @@ def addr2bytes(addr: tuple, nat_type_id: int):
     bytes += struct.pack("H", nat_type_id)
     return bytes
 
+# forward symmetric chat msg, act as TURN server
+def forward_msg(sock_handle: socket, clients: dict, data, addr):
+    try:
+        sock_handle.sendto(bytes(data[4:], 'utf-8'), clients[addr])
+        print("msg successfully forwarded to {0}".format(clients[addr]))
+        print(data[4:]) # we should probably use some other clever way to do this
+    except KeyError:
+        print("something is wrong with symmetric_chat_clients!")
+        print(clients[addr]) # for debugging purpose only
+
+
+
 def main():
     port = int(sys.argv[1])
     # https://docs.python.org/3.6/library/socket.html
-    serv_sock = socket.socket(type=socket.SOCK_DGRAM)
-    serv_sock.bind(("", port))
+    sock_handle = socket.socket(type=socket.SOCK_DGRAM)
+    sock_handle.bind(("", port))
     print("listening on *:%d (udp)" % port)
     poolqueue = {}
     symmetric_chat_clients = {}
     ClientInfo = namedtuple('ClientInfo', ['addr', 'nat_type_id'])
 
     while True:
-        data, addr = serv_sock.recvfrom(1024)
+        data, addr = sock_handle.recvfrom(1024)
         data = data.decode("utf-8")
-        if data.startswith("msg "):
-            # forward symmetric chat msg, act as TURN server
-            try:
-                serv_sock.sendto(bytes(data[4:], 'utf-8'), symmetric_chat_clients[addr])
-                print("msg successfully forwarded to {0}".format(symmetric_chat_clients[addr]))
-                print(data[4:])
-            except KeyError:
-                print("something is wrong with symmetric_chat_clients!")
-                print(symmetric_chat_clients[addr])
+        if data.startswith("msg ") and not symmetric_chat_clients: # ...and dict is not empty
+            forward_msg(sock_handle, symmetric_chat_clients, data, addr)
         else:
             # help build connection between clients, act as STUN server
             print("connection from %s:%d" % addr)
             pool, nat_type_id = data.strip().split()
-            serv_sock.sendto(bytes("ok {0}".format(pool), 'utf-8'), addr)
+            sock_handle.sendto(bytes("ok {0}".format(pool), 'utf-8'), addr)
             print("pool={0}, nat_type={1}, ok sent to client".format(pool, NATTYPE[int(nat_type_id)]))
-            data, addr = serv_sock.recvfrom(2)
+            data, addr = sock_handle.recvfrom(2)
             data = data.decode('utf-8')
             if data != "ok":
                 continue
@@ -63,8 +68,8 @@ def main():
             try:
                 a, b = poolqueue[pool].addr, addr
                 nat_type_id_a, nat_type_id_b = poolqueue[pool].nat_type_id, nat_type_id
-                serv_sock.sendto(addr2bytes(a, nat_type_id_a), b)
-                serv_sock.sendto(addr2bytes(b, nat_type_id_b), a)
+                sock_handle.sendto(addr2bytes(a, nat_type_id_a), b)
+                sock_handle.sendto(addr2bytes(b, nat_type_id_b), a)
                 print("linked", pool)
                 del poolqueue[pool]
             except KeyError:
