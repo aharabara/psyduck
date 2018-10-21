@@ -1,15 +1,11 @@
-#!/usr/bin/env python
-# coding:utf-8
-
 import socket
 import struct
 import sys
 from collections import namedtuple
 
-NATTYPE = ("Full Cone", "Restrict NAT", "Restrict Port NAT", "Symmetric NAT", "Unknown NAT")
+NATTYPE = ('Full Cone', 'Restrict NAT', 'Restrict Port NAT', 'Symmetric NAT', 'Unknown NAT')
 
-
-def addr2bytes(addr, nat_type_id):
+def addr2bytes(addr: tuple, nat_type_id: int):
     """Convert an address pair to a hash."""
     host, port = addr
     try:
@@ -30,41 +26,34 @@ def addr2bytes(addr, nat_type_id):
     return bytes
 
 def main():
-    port = sys.argv[1]
-    try:
-        port = int(sys.argv[1])
-    except (IndexError, ValueError):
-        pass
-
-    sockfd = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-    sockfd.bind(("", port))
+    port = int(sys.argv[1])
+    # https://docs.python.org/3.6/library/socket.html
+    serv_sock = socket.socket(type=socket.SOCK_DGRAM)
+    serv_sock.bind(("", port))
     print("listening on *:%d (udp)" % port)
-
     poolqueue = {}
-    # A,B with addr_A,addr_B,pool=100
-    # temp state {100:(nat_type_id, addr_A, addr_B)}
-    # final state {addr_A:addr_B, addr_B:addr_A}
     symmetric_chat_clients = {}
     ClientInfo = namedtuple('ClientInfo', ['addr', 'nat_type_id'])
-    while True:
 
-        data, addr = sockfd.recvfrom(1024)
+    while True:
+        data, addr = serv_sock.recvfrom(1024)
         data = data.decode("utf-8")
         if data.startswith("msg "):
             # forward symmetric chat msg, act as TURN server
             try:
-                sockfd.sendto(bytes(data[4:], 'utf-8'), symmetric_chat_clients[addr])
+                serv_sock.sendto(bytes(data[4:], 'utf-8'), symmetric_chat_clients[addr])
                 print("msg successfully forwarded to {0}".format(symmetric_chat_clients[addr]))
                 print(data[4:])
             except KeyError:
                 print("something is wrong with symmetric_chat_clients!")
+                print(symmetric_chat_clients[addr])
         else:
             # help build connection between clients, act as STUN server
             print("connection from %s:%d" % addr)
             pool, nat_type_id = data.strip().split()
-            sockfd.sendto(bytes("ok {0}".format(pool), 'utf-8'), addr)
+            serv_sock.sendto(bytes("ok {0}".format(pool), 'utf-8'), addr)
             print("pool={0}, nat_type={1}, ok sent to client".format(pool, NATTYPE[int(nat_type_id)]))
-            data, addr = sockfd.recvfrom(2)
+            data, addr = serv_sock.recvfrom(2)
             data = data.decode('utf-8')
             if data != "ok":
                 continue
@@ -74,8 +63,8 @@ def main():
             try:
                 a, b = poolqueue[pool].addr, addr
                 nat_type_id_a, nat_type_id_b = poolqueue[pool].nat_type_id, nat_type_id
-                sockfd.sendto(addr2bytes(a, nat_type_id_a), b)
-                sockfd.sendto(addr2bytes(b, nat_type_id_b), a)
+                serv_sock.sendto(addr2bytes(a, nat_type_id_a), b)
+                serv_sock.sendto(addr2bytes(b, nat_type_id_b), a)
                 print("linked", pool)
                 del poolqueue[pool]
             except KeyError:
