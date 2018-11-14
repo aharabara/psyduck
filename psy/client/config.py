@@ -5,6 +5,21 @@ from datetime import datetime
 from event_bus import EventBus
 
 from psy.client.message import Message
+from orator import DatabaseManager, Model
+
+config = {
+    'sqlite': {
+        'driver': 'sqlite',
+        'host': './psy.db',
+        'database': 'psy-chat',
+        'user': 'root',
+        'password': 'root',
+        'prefix': ''
+    }
+}
+
+db = DatabaseManager(config)
+Model.set_connection_resolver(db)
 
 bus = EventBus()
 
