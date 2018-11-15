@@ -1,0 +1,4 @@
+databases:
+    psy-chat:
+        driver: sqlite
+        database: database.db

@@ -6,12 +6,12 @@ from typing import List, Optional
 
 import npyscreen
 
+from models.user import User
 from psy import network
-from psy.client import Client, Contact
-from psy.client.config import bus
+from psy.client import Client
+from configs.config import bus
 
-from psy.client.user import User
-from psy.client.message import Message
+from models.message import Message
 from psy.client.ui import Contacts, MessagesHistory, MessageBox
 
 
@@ -23,19 +23,19 @@ class MainForm(npyscreen.FormBaseNew):
 
     # User related entities
     user: User
-    current_contact: Contact
+    current_contact: User
     current_pool: Thread
 
     # Конструктор
     def create(self):
         # @todo add option parser
-        self.user = User("Alexander", sys.argv[1], 0)
+        self.user = User.query().where_has('role', lambda q: q.where('alias', '=', 'user')).first()
         self.current_contact = self.user
 
         y, x = self.useable_space()
 
         # Добавляем виджет TitleText на форму
-        self.contacts_box = self.add(Contacts, name="Contacts", values=self.user.contact_list, width=x // 4 - 4)
+        self.contacts_box = self.add(Contacts, name="Contacts", values=self.user.contacts, width=x // 4 - 4)
         self.messages_history = self.add(MessagesHistory, name="Chat", values=[], editable=False,
                                          relx=x // 4, rely=2,
                                          max_height=y // 4 * 3, max_width=x // 4 * 3)

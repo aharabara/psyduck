@@ -1,8 +1,6 @@
 from orator.migrations import Migration
 from orator.schema import Blueprint
 
-from models.user import User
-
 
 class CreateUsersTable(Migration):
 
@@ -11,12 +9,19 @@ class CreateUsersTable(Migration):
         Run the migrations.
         """
 
-        table: Blueprint = self.schema.create('users')
-        table.increments('id')
-        table.string('name')
-        table.string('nickname')
-        table.enum('role', [User.ROLE_USER, User.ROLE_CONTACT])
-        table.timestamps()
+        table: Blueprint
+        with self.schema.create('users') as table:
+            table.increments('id')
+            table.string('name')
+            table.string('nickname')
+            table.text('key')
+            table.integer('user_id').nullable()
+            table.integer('role_id')
+            table.timestamps()
+
+            table.foreign('user_id').references('id').on('users').on_delete('cascade')
+            table.foreign('role_id').references('id').on('roles').on_delete('cascade')
+
 
     def down(self):
         """

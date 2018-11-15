@@ -1,5 +1,5 @@
 import npyscreen
-from psy.client.config import bus
+from configs.config import bus
 from psy.forms.main_form import MainForm
 
 

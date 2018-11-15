@@ -1,6 +1,5 @@
 #!/usr/bin/env python
 # coding:utf-8
-import os
 import pickle
 import socket
 import sys
@@ -8,9 +7,9 @@ import time
 from threading import Event, Thread
 from typing import Tuple, List
 from psy import network
-from psy.client.message import Message
-from psy.client.config import bus
-from psy.client.config import logging
+from models.message import Message
+from configs.config import bus
+from configs.config import logging
 
 
 class Client:
