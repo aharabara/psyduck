@@ -22,6 +22,14 @@ pip install pip==18.0
 pipenv install
 ```
 
+##### Initialize project
+```commandline
+orator migrate:install -f
+orator migrate -f
+orator db:seed -f
+
+```
+
 ----
 
 ### Type checking
