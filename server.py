@@ -1,10 +1,11 @@
 import socket
 import struct
 import sys
+import json
 from collections import namedtuple
 
 NATTYPE = ('Full Cone', 'Restrict NAT', 'Restrict Port NAT', 'Symmetric NAT', 'Unknown NAT')
-
+'''
 def addr2bytes(addr: tuple, nat_type_id: int):
     """Convert an address pair to a hash."""
     host, port = addr
@@ -34,66 +35,74 @@ def forward_msg(sock_handle: socket, clients: dict, data, addr):
     except KeyError:
         print("something is wrong with symmetric_chat_clients!")
         print(clients[addr]) # for debugging purpose only
-
-def check_connection(sock: socket, pool: int, nat_type_id: int, addr: tuple):
+'''
+def establish_connection(sock: socket, pool: int, nat_type_id: int, addr: tuple):
+    print(addr)
     sock.sendto(bytes("ok {0}".format(pool), 'utf-8'), addr)
     print("pool={0}, nat_type={1}, ok sent to client".format(pool, NATTYPE[int(nat_type_id)]))
     data, addr = sock.recvfrom(2)
     data = data.decode('utf-8')
-    return data != "ok"
+    print(data == "ok")
+    return data == "ok"
 
 def main():
     port = int(sys.argv[1])
     # https://docs.python.org/3.6/library/socket.html
     sock_handle = socket.socket(type=socket.SOCK_DGRAM)
     sock_handle.bind(('0.0.0.0', port))
-    print("listening on *:%d (udp)" % port)
+    print("listening on *:%d (UDP)" % port)
     poolqueue = {}
-    symmetric_chat_clients = {}
+    chat_clients = {}
+
     ClientInfo = namedtuple('ClientInfo', ['addr', 'nat_type_id'])
 
+    # todo authentication with JWT ?
     while True:
+        print(poolqueue)
+        print(chat_clients)
         data, addr = sock_handle.recvfrom(1024)
-        data = data.decode("utf-8")
-        print('Data received')
-        print(data)
-        if not data:
-            print('empty data')
-            break
+        print("connection from %s:%d" % addr)
+
+        if data == b'\n':
+            print('data is empty')
             continue
-        if data.startswith("msg ") and not symmetric_chat_clients: # ...and dict is not empty
-            forward_msg(sock_handle, symmetric_chat_clients, data, addr)
-        else:
-            # help build connection between clients, act as STUN server
-            print("connection from %s:%d" % addr)
-            print(data.strip())
-            pool, nat_type_id = data.strip().split()
-            if not check_connection(sock_handle, pool, nat_type_id, addr):
-                continue
-            print("request received for pool:", pool)
+        data = data.decode("utf-8")
+        # how client knows about NAT type ? Network Address Translation
+        if len(data.split()) < 2:
+            print('not enough data')
+            continue
 
-            try:
-                a, b = poolqueue[pool].addr, addr
-                nat_type_id_a, nat_type_id_b = poolqueue[pool].nat_type_id, nat_type_id
-                sock_handle.sendto(addr2bytes(a, nat_type_id_a), b)
-                sock_handle.sendto(addr2bytes(b, nat_type_id_b), a)
-                print("linked", pool)
-                del poolqueue[pool]
-            except KeyError:
-                poolqueue[pool] = ClientInfo(addr, nat_type_id)
+        # help build connection between clients, act as STUN server
+        pool, nat_type_id = data.strip().split()
+        if not establish_connection(sock_handle, pool, nat_type_id, addr):
+            print('connection is not okay')
+            continue
+        print("request received for pool:", pool)
 
-            if pool in symmetric_chat_clients:
-                if nat_type_id == '3' or symmetric_chat_clients[pool][0] == '3':
-                    # at least one is symmetric NAT
-                    recorded_client_addr = symmetric_chat_clients[pool][1]
-                    symmetric_chat_clients[addr] = recorded_client_addr
-                    symmetric_chat_clients[recorded_client_addr] = addr
-                    print("Hurray! symmetric chat link established.")
-                    del symmetric_chat_clients[pool]
-                else:
-                    del symmetric_chat_clients[pool]  # neither clients are symmetric NAT
+        try:
+            # here happens the actual exchange of client addresses
+            # send each client the opposite address so they can talk without the server
+            firstUser, secondUser = poolqueue[pool].addr, addr
+            natFirstUser, natSecondUser = poolqueue[pool].nat_type_id, nat_type_id
+            sock_handle.sendto(bytes(json.dumps(secondUser), 'utf-8'), firstUser)
+            sock_handle.sendto(bytes(json.dumps(firstUser), 'utf-8'), secondUser)
+            print("linked", pool)
+            del poolqueue[pool]
+        except KeyError:
+            poolqueue[pool] = ClientInfo(addr, nat_type_id)
+
+        if pool in chat_clients:
+            if nat_type_id == '3' or chat_clients[pool][0] == '3':
+                # at least one is symmetric NAT
+                recorded_client_addr = chat_clients[pool][1]
+                chat_clients[addr] = recorded_client_addr
+                chat_clients[recorded_client_addr] = addr
+                print("Hurray! symmetric chat link established.")
+                del chat_clients[pool]
             else:
-                symmetric_chat_clients[pool] = (nat_type_id, addr)
+                del chat_clients[pool]  # neither clients are symmetric NAT
+        else:
+            chat_clients[pool] = (nat_type_id, addr)
 
 
 if __name__ == "__main__":
