@@ -35,13 +35,18 @@ def forward_msg(sock_handle: socket, clients: dict, data, addr):
         print("something is wrong with symmetric_chat_clients!")
         print(clients[addr]) # for debugging purpose only
 
-
+def check_connection(sock: socket, pool: int, nat_type_id: int, addr: tuple):
+    sock.sendto(bytes("ok {0}".format(pool), 'utf-8'), addr)
+    print("pool={0}, nat_type={1}, ok sent to client".format(pool, NATTYPE[int(nat_type_id)]))
+    data, addr = sock.recvfrom(2)
+    data = data.decode('utf-8')
+    return data != "ok"
 
 def main():
     port = int(sys.argv[1])
     # https://docs.python.org/3.6/library/socket.html
     sock_handle = socket.socket(type=socket.SOCK_DGRAM)
-    sock_handle.bind(("", port))
+    sock_handle.bind(('0.0.0.0', port))
     print("listening on *:%d (udp)" % port)
     poolqueue = {}
     symmetric_chat_clients = {}
@@ -50,19 +55,21 @@ def main():
     while True:
         data, addr = sock_handle.recvfrom(1024)
         data = data.decode("utf-8")
+        print('Data received')
+        print(data)
+        if not data:
+            print('empty data')
+            break
+            continue
         if data.startswith("msg ") and not symmetric_chat_clients: # ...and dict is not empty
             forward_msg(sock_handle, symmetric_chat_clients, data, addr)
         else:
             # help build connection between clients, act as STUN server
             print("connection from %s:%d" % addr)
+            print(data.strip())
             pool, nat_type_id = data.strip().split()
-            sock_handle.sendto(bytes("ok {0}".format(pool), 'utf-8'), addr)
-            print("pool={0}, nat_type={1}, ok sent to client".format(pool, NATTYPE[int(nat_type_id)]))
-            data, addr = sock_handle.recvfrom(2)
-            data = data.decode('utf-8')
-            if data != "ok":
+            if not check_connection(sock_handle, pool, nat_type_id, addr):
                 continue
-
             print("request received for pool:", pool)
 
             try:
