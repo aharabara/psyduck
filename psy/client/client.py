@@ -34,21 +34,28 @@ class Client:
         self.messages = messages
 
     def request_for_connection(self, nat_type_id=0):
-        self.sockfd: socket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-        self.sockfd.sendto(bytes(self.receiver.key + ' {0}'.format(nat_type_id), 'utf-8'), self.master)
-        data, addr = self.sockfd.recvfrom(len(self.receiver.key) + 3)
-        data = data.decode('utf-8')
-        if data != "ok " + self.receiver.key:
-            logging.warn("unable to request!")
-            sys.exit(1)
-        self.sockfd.sendto(bytes("ok", 'utf-8'), self.master)
-        logging.info("request sent, waiting for partner in pool '%s'..." % self.receiver.key)
-        data, addr = self.sockfd.recvfrom(8)
+        bus.emit('client:connection:status_changed', "Connecting...", threads=True)
 
-        self.target, peer_nat_type_id = network.bytes2address(data)
-        logging.info(str(self.target) + " " + str(peer_nat_type_id))
-        self.peer_nat_type = network.NATTYPE[peer_nat_type_id]
-        logging.info("connected to {1}:{2}, its NAT type is {0}".format(self.peer_nat_type, *self.target))
+        connected = False
+        while not connected:
+            self.sockfd: socket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+            self.sockfd.sendto(bytes(self.receiver.key + ' {0}'.format(nat_type_id), 'utf-8'), self.master)
+            data, addr = self.sockfd.recvfrom(len(self.receiver.key) + 3)
+            data = data.decode('utf-8')
+            if data != "ok " + self.receiver.key:
+                logging.warn("unable to request!")
+                sys.exit(1)
+            self.sockfd.sendto(bytes("ok", 'utf-8'), self.master)
+            logging.info("request sent, waiting for partner in pool '%s'..." % self.receiver.key)
+            data, addr = self.sockfd.recvfrom(8)
+
+            self.target, peer_nat_type_id = network.bytes2address(data)
+            logging.info(str(self.target) + " " + str(peer_nat_type_id))
+            self.peer_nat_type = network.NATTYPE[peer_nat_type_id]
+            logging.info("connected to {1}:{2}, its NAT type is {0}".format(self.peer_nat_type, *self.target))
+            connected = True
+
+        bus.emit('client:connection:status_changed', "Connected", threads=True)
 
     def receive_message(self, sock, is_restrict=False, event=None):
         if is_restrict:
@@ -82,8 +89,8 @@ class Client:
                     message = Message({
                         'content': data['content'],
                         'was_sent': True,
-                        'receiver_id': self.sender.id,
-                        'sender_id': self.receiver.id,
+                        'receiver_id': self.receiver.id,
+                        'sender_id': self.sender.id,
                     })
                     message.save()
                     self.messages.append(message)

@@ -1,13 +1,19 @@
-from orator import Model, scope
+from orator import Model
 from orator.orm import belongs_to
 
 
 class Message(Model):
 
+    receiver_id: int
+    sender_id: int
+    was_sent: bool
+    was_read: bool
+    content: str
+
     __fillable__ = ['was_sent', 'content', 'receiver_id', 'sender_id']
 
     def __str__(self) -> str:
-        # @todo display text for different users on different sides of textarea
+        self.was_read = True
         return self.sender.nickname + " >> " + self.content
 
     @belongs_to('sender_id')
