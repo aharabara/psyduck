@@ -1,11 +1,13 @@
 import curses
+import logging
 import sys
 
 from threading import Thread
-from typing import List, Optional
+from typing import List, Optional, Dict
 
 import npyscreen
 
+from models.server import Server
 from models.user import User
 from psy import network
 from psy.client import Client
@@ -26,12 +28,19 @@ class MainForm(npyscreen.FormBaseNew):
     current_contact: User
     current_pool: Thread
 
+    clients: Dict[str, Client]
+    main_server: Server
+
     # Конструктор
     def create(self):
         # @todo add option parser
-        self.user = User.query().where_has('role', lambda q: q.where('alias', '=', 'user')).first()
+        self.user = User.query().where_has('role', lambda q: q.where('alias', '=', 'user')).where('nickname', sys.argv[1]).first()
         self.current_contact = self.user
 
+        self.main_server = Server.query().where('alias', 'main').first()
+        self.clients = dict()
+
+        print(self.user)
         y, x = self.useable_space()
 
         # Добавляем виджет TitleText на форму
@@ -44,7 +53,7 @@ class MainForm(npyscreen.FormBaseNew):
 
         self.setup_keyboard_handlers()
 
-        self.contacts_box.value_changed_callback = self.select_contact
+        self.contacts_box.value_changed_callback = self.on_contact_selection
 
     def setup_keyboard_handlers(self):
         self.add_handlers({
@@ -54,17 +63,19 @@ class MainForm(npyscreen.FormBaseNew):
             curses.KEY_IC: self.send,
         })
 
-    def select_contact(self, widget):
+    def on_contact_selection(self, widget):
         selected: List = self.contacts_box.get_value()
-        if len(selected):
-            index: int = self.contacts_box.get_value().pop()
-            self.current_contact = self.contacts_box.get_values()[index]
-            self.messages_history.values = self.current_contact.messages
-            master_ip: str = '127.0.0.1'
-            port: int = 5678
-            pool: str = str(self.current_contact.pool)
+        if not len(selected):
+            return
 
-            client: Client = Client(master_ip, port, pool, self.current_contact.messages)
+        self.get_selected_contact()
+        messages = self.get_dialog_messages()
+
+        self.messages_history.values = messages
+
+        client = self.current_contact = self.clients.get(self.user.key)
+        if not client:
+            client = self.clients[self.user.key] = Client(self.main_server, self.user, self.current_contact, self.messages_history.values)
             nat_type: Optional[str] = None
             try:
                 nat_type = network.NATTYPE[int(sys.argv[4])]
@@ -76,11 +87,27 @@ class MainForm(npyscreen.FormBaseNew):
             self.current_pool.setDaemon(True)
             self.current_pool.start()
 
+    def get_dialog_messages(self):
+        return Message.query() \
+            .where('sender_id', self.user.id).where('receiver_id', self.current_contact.id) \
+            .or_where('receiver_id', self.user.id).where('sender_id', self.current_contact.id) \
+            .get()
+
+    def get_selected_contact(self):
+        index: int = self.contacts_box.get_value().pop()
+        self.current_contact = self.contacts_box.get_values()[index]
+
     def quit(self, number):
         quit()
 
     def send(self, number):
-        message = Message(self.user, self.message_box.value)
+        # self.user.messages.
+        message = Message({
+            'receiver_id': self.current_contact.id,
+            'content': self.message_box.value,
+            'was_sent': False,
+        })
+        self.current_contact.owned_messages().save(message)
         self.messages_history.values.append(message)
         self.message_box.value = ""
         bus.emit('client:messages:sent', message)

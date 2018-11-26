@@ -7,6 +7,10 @@ import time
 from threading import Event, Thread
 from typing import Tuple, List
 from psy import network
+
+from orator.support import Collection
+from models.server import Server
+from models.user import User
 from models.message import Message
 from configs.config import bus
 from configs.config import logging
@@ -18,11 +22,12 @@ class Client:
 
     periodic_running: str
     peer_nat_type: str
-    messages: List[Message]
+    messages: Collection
 
-    def __init__(self, master_ip: str, port: int, pool: str, messages: List) -> None:
-        self.master = (master_ip, port)
-        self.pool = pool.strip()
+    def __init__(self, server: Server, sender: User, receiver: User, messages: Collection) -> None:
+        self.sender = sender
+        self.receiver = receiver
+        self.master = server.to_tuple()
         self.sockfd = self.target = None
         self.periodic_running = False
         self.peer_nat_type = None
@@ -30,14 +35,14 @@ class Client:
 
     def request_for_connection(self, nat_type_id=0):
         self.sockfd: socket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-        self.sockfd.sendto(bytes(self.pool + ' {0}'.format(nat_type_id), 'utf-8'), self.master)
-        data, addr = self.sockfd.recvfrom(len(self.pool) + 3)
+        self.sockfd.sendto(bytes(self.receiver.key + ' {0}'.format(nat_type_id), 'utf-8'), self.master)
+        data, addr = self.sockfd.recvfrom(len(self.receiver.key) + 3)
         data = data.decode('utf-8')
-        if data != "ok " + self.pool:
+        if data != "ok " + self.receiver.key:
             logging.warn("unable to request!")
             sys.exit(1)
         self.sockfd.sendto(bytes("ok", 'utf-8'), self.master)
-        logging.info("request sent, waiting for partner in pool '%s'..." % self.pool)
+        logging.info("request sent, waiting for partner in pool '%s'..." % self.receiver.key)
         data, addr = self.sockfd.recvfrom(8)
 
         self.target, peer_nat_type_id = network.bytes2address(data)
@@ -45,7 +50,7 @@ class Client:
         self.peer_nat_type = network.NATTYPE[peer_nat_type_id]
         logging.info("connected to {1}:{2}, its NAT type is {0}".format(self.peer_nat_type, *self.target))
 
-    def recv_msg(self, sock, is_restrict=False, event=None):
+    def receive_message(self, sock, is_restrict=False, event=None):
         if is_restrict:
             while True:
                 data, addr = sock.recvfrom(1024)
@@ -56,6 +61,14 @@ class Client:
                     logging.info("received msg from target,", "periodic send cancelled, chat start.")
                 if addr == self.target or addr == self.master:
                     message = pickle.loads(data)
+
+                    message = Message({
+                        'content': message['content'],
+                        'was_sent': True,
+                        'receiver_id': self.sender.id,
+                        'sender_id': self.receiver.id,
+                    })
+                    message.save()
                     self.messages.append(message)
                     bus.emit('client:messages:received', message)
                     if data == "punching...\n":
@@ -65,26 +78,34 @@ class Client:
             while True:
                 data, addr = sock.recvfrom(1024)
                 if addr == self.target or addr == self.master:
-                    message = pickle.loads(data)
+                    data = pickle.loads(data)
+                    message = Message({
+                        'content': data['content'],
+                        'was_sent': True,
+                        'receiver_id': self.sender.id,
+                        'sender_id': self.receiver.id,
+                    })
+                    message.save()
                     self.messages.append(message)
                     bus.emit('client:messages:received', message)
                     if data == "punching...\n":  # peer是restrict
                         sock.sendto("end punching", addr)
 
-    def send_msg(self, sock):
+    def send_message(self, sock):
         while True:
-            if len(self.messages) > 0:
-                messages = self.get_messages_to_send()
-                if len(messages):
-                    for message in messages:
-                        message.was_sent = True
-                        bus.emit('client:messages:sent', message)
-                        sock.sendto(pickle.dumps(message), self.target)
+            messages = self.messages.where('was_sent', False)
+            if len(messages):
+                for message in messages:
+                    message.was_sent = True
+                    bus.emit('client:messages:sent', message)
+                    sock.sendto(pickle.dumps(message.to_dict()), self.target)
+                    message.save()
+            time.sleep(0.5)
 
     def get_messages_to_send(self):
         to_send: List = []
         for message in self.messages:
-            if not message.was_sent:
+            if not message['was_sent']:
                 to_send.append(message)
         return to_send
 
@@ -100,7 +121,7 @@ class Client:
         tr.start()
 
     def chat_fullcone(self):
-        self.start_working_threads(self.send_msg, self.recv_msg, None, self.sockfd)
+        self.start_working_threads(self.send_message, self.receive_message, None, self.sockfd)
 
     def chat_restrict(self):
         from threading import Timer
@@ -115,7 +136,7 @@ class Client:
         self.periodic_running = True
         send(0)
         kwargs = {'is_restrict': True, 'event': cancel_event}
-        self.start_working_threads(self.send_msg, self.recv_msg, cancel_event,
+        self.start_working_threads(self.send_message, self.receive_message, cancel_event,
                                    self.sockfd, **kwargs)
 
     def chat_symmetric(self):
@@ -133,10 +154,9 @@ class Client:
             while True:
                 data, addr = sock.recvfrom(1024)
                 if addr == self.master:
-                    self.messages.append(data.decode('utf-8'))
+                    self.messages.append(pickle.loads(data))
 
-        self.start_working_threads(send_msg_symm, recv_msg_symm, None,
-                                   self.sockfd)
+        self.start_working_threads(send_msg_symm, recv_msg_symm, None, self.sockfd)
 
     def main(self, test_nat_type=None):
         """
@@ -156,10 +176,7 @@ class Client:
             logging.error("NAT type is %s" % nat_type)
             self.request_for_connection(nat_type_id=4)  # Unknown NAT
 
-        if nat_type == network.UnknownNAT or self.peer_nat_type == network.UnknownNAT:
-            logging.info("Symmetric chat mode")
-            self.chat_symmetric()
-        if nat_type == network.SymmetricNAT or self.peer_nat_type == network.SymmetricNAT:
+        if nat_type in (network.UnknownNAT, network.SymmetricNAT) or self.peer_nat_type in (network.SymmetricNAT, network.UnknownNAT):
             logging.info("Symmetric chat mode")
             self.chat_symmetric()
         elif nat_type == network.FullCone:

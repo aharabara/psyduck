@@ -17,8 +17,13 @@ class User(Model):
     def contacts(self):
         return User
 
-    @has_many
-    def messages(self):
+    @has_many('sender_id')
+    def owned_messages(self):
+        from models.message import Message
+        return Message
+
+    @has_many('receiver_id')
+    def received_messages(self):
         from models.message import Message
         return Message
 
